@@ -26,18 +26,18 @@ DATA_FILE = ROOT / "dashboard_data.json"
 REACT_DIST = ROOT / "dashboard-ui" / "dist"
 
 app = Flask(__name__)
-CORS(
-    app,
-    resources={
-        r"/api/*": {
-            "origins": [
-                "http://localhost:5173",
-                "http://127.0.0.1:5173",
-                "http://localhost:5000",
-            ]
-        }
-    },
-)
+# CORS abierto para desarrollo local (cualquier origen)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+
+@app.after_request
+def no_cache(response):
+    """Evitar respuestas 304 que rompen el fetch del frontend."""
+    if request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 def _load_data() -> dict:
@@ -55,6 +55,9 @@ STATIONS = DATA.get("stations", [])
 EVOLUTION = DATA.get("evolution", [])
 MODELS = DATA.get("models", [])
 HOURLY_MAE = DATA.get("hourly_mae", [])
+HOURLY_BY_MODEL = DATA.get("hourly_mae_by_model", {})
+STATION_MAE = DATA.get("station_mae", {})
+MODEL_ERROR_METRICS = DATA.get("model_error_metrics", {})
 
 
 def gen_scatter_data(model_key: str, n_points: int = 250) -> list[dict]:
@@ -91,6 +94,20 @@ def gen_improvement_by_region(model_key: str) -> list[dict]:
             }
         )
     return sorted(improvements, key=lambda x: x["improvement"], reverse=True)
+
+
+@app.route("/api/station_mae")
+def get_station_mae():
+    model = request.args.get("model", "tuneado")
+    rows = STATION_MAE.get(model, STATION_MAE.get("tuneado", []))
+    return jsonify({"model": model, "stations": rows})
+
+
+@app.route("/api/error_metrics")
+def get_error_metrics():
+    model = request.args.get("model", "tuneado")
+    em = MODEL_ERROR_METRICS.get(model, MODEL_ERROR_METRICS.get("tuneado", {}))
+    return jsonify({"model": model, **em})
 
 
 @app.route("/api/health")
@@ -152,6 +169,22 @@ def get_models():
     return jsonify({"models": MODELS})
 
 
+@app.route("/api/model_comparison")
+def get_model_comparison():
+    rows = []
+    for m in MODELS:
+        mid = m["id"]
+        met = MODEL_METRICS.get(mid, {})
+        rows.append({
+            "id": mid,
+            "label": m["label"],
+            "mae": round(met.get("mae", 0), 3),
+            "rmse": round(met.get("rmse", 0), 2),
+            "mejora": round(met.get("mejora", 0), 1),
+        })
+    return jsonify({"models": rows})
+
+
 @app.route("/api/evolution")
 def get_evolution():
     return jsonify({"evolution": EVOLUTION})
@@ -160,15 +193,18 @@ def get_evolution():
 @app.route("/api/hourly")
 def get_hourly():
     model = request.args.get("model", "tuneado")
-    scale = MODEL_METRICS.get(model, MODEL_METRICS["tuneado"])["mae"] / 3.76
-    rows = []
-    for row in HOURLY_MAE:
-        rows.append(
-            {
-                **row,
-                "mae_model": round(row["mae_model"] * scale, 2),
-            }
-        )
+    # Usar datos por modelo si están disponibles; fallback al tuneado
+    source = HOURLY_BY_MODEL.get(model, HOURLY_BY_MODEL.get("tuneado", HOURLY_MAE))
+    rows = [
+        {
+            "hora":             row.get("hora", row.get("Hora", i)),
+            "error_humedad":    row.get("error_humedad", 0),
+            "error_compensado": row.get("error_compensado", 0),
+            "mae_model":        row.get("mae_model", 0),
+            "mae_bench":        row.get("mae_bench", 0),
+        }
+        for i, row in enumerate(source)
+    ]
     return jsonify({"model": model, "hourly": rows})
 
 
@@ -197,7 +233,7 @@ def static_proxy(path: str):
 
 
 def reload_data():
-    global DATA, FOLD_METRICS, MODEL_METRICS, SHAP_DATA, STATIONS, EVOLUTION, MODELS, HOURLY_MAE
+    global DATA, FOLD_METRICS, MODEL_METRICS, SHAP_DATA, STATIONS, EVOLUTION, MODELS, HOURLY_MAE, HOURLY_BY_MODEL, STATION_MAE, MODEL_ERROR_METRICS
     DATA = _load_data()
     FOLD_METRICS = DATA["fold_metrics"]
     MODEL_METRICS = DATA["model_metrics"]
@@ -206,6 +242,9 @@ def reload_data():
     EVOLUTION = DATA.get("evolution", [])
     MODELS = DATA.get("models", [])
     HOURLY_MAE = DATA.get("hourly_mae", [])
+    HOURLY_BY_MODEL = DATA.get("hourly_mae_by_model", {})
+    STATION_MAE = DATA.get("station_mae", {})
+    MODEL_ERROR_METRICS = DATA.get("model_error_metrics", {})
 
 
 @app.route("/api/reload", methods=["POST"])
@@ -217,6 +256,9 @@ def api_reload():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print(f"📊 API: http://localhost:{port}/api/health")
+    print(f"📁 Archivo de datos: {DATA_FILE}")
+    print(f"📁 Existe: {DATA_FILE.exists()}")
+    print(f"🔑 Claves en datos: {list(DATA.keys())}")
     if (REACT_DIST / "index.html").is_file():
         print(f"🖥  Dashboard: http://localhost:{port}")
     else:
