@@ -1,0 +1,19 @@
+# Dashboard React + API serverless (lee dashboard_data.json)
+[build]
+  command = "cd dashboard-ui && npm ci && npm run build"
+  publish = "dashboard-ui/dist"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["dashboard_data.json"]
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
