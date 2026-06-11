@@ -6,7 +6,11 @@ import {
   Filler, Tooltip, Legend,
 } from "chart.js";
 import { Bar, Line, Scatter } from "react-chartjs-2";
-import { api } from "./api";
+import { api, isStaticData } from "./api";
+
+const LOAD_ERROR = isStaticData
+  ? "No se pudieron cargar los datos del dashboard."
+  : "No se pudo conectar con la API. Ejecutá: python backend_api.py";
 import { US_STATES } from "./usStates.js";
 import { featureLabel } from "./storyContent.js";
 import { C, HUE, cat, hsl, quant, shade, tint } from "./theme.js";
@@ -343,7 +347,7 @@ export default function App() {
       } catch (e) {
         console.error(e);
         if (!cancelled) {
-          setError("No se pudo conectar con la API. En otra terminal ejecutá: python backend_api.py");
+          setError(LOAD_ERROR);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -375,7 +379,7 @@ export default function App() {
       setImprovement(imp.stations || []);
     } catch (e) {
       console.error(e);
-      setError("No se pudo conectar con la API. En otra terminal ejecutá: python backend_api.py");
+      setError(LOAD_ERROR);
     } finally {
       setModelLoading(false);
     }
@@ -961,8 +965,13 @@ export default function App() {
 
       {error && (
         <div className="banner-error">
-          {error} — luego abrí <a href="http://localhost:5173">localhost:5173</a> (dev) o{" "}
-          <a href="http://localhost:5000">localhost:5000</a> (con build).
+          {error}
+          {!isStaticData && (
+            <>
+              {" "}— luego abrí <a href="http://localhost:5173">localhost:5173</a> (dev) o{" "}
+              <a href="http://localhost:5000">localhost:5000</a> (con build).
+            </>
+          )}
         </div>
       )}
 
