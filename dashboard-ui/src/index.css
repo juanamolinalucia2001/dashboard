@@ -255,6 +255,56 @@ select {
   gap: 14px;
 }
 
+.grid-kpi-exec {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.exec-banner {
+  background: linear-gradient(135deg, hsl(var(--hue-corrected), 42%, 32%), hsl(var(--hue-corrected), 48%, 26%));
+  color: hsl(0, 0%, 100%);
+  border-radius: 12px;
+  padding: 22px 26px;
+  border: none;
+  box-shadow: 0 4px 20px hsla(var(--hue-corrected), 40%, 20%, 0.25);
+}
+
+.exec-banner-title {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.exec-banner-sub {
+  margin-top: 8px;
+  font-size: 16px;
+  opacity: 0.92;
+  line-height: 1.45;
+}
+
+.kpi-exec .kpi-value {
+  font-size: 38px;
+}
+
+.kpi-badge {
+  margin-top: 10px;
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-corrected);
+  background: hsl(var(--hue-corrected), 30%, 94%);
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.map-chart-exec {
+  aspect-ratio: 700 / 430;
+  width: 100%;
+  position: relative;
+  min-height: 320px;
+}
+
 .grid-2-square {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -264,6 +314,14 @@ select {
 @media (max-width: 1100px) {
   .grid-kpi {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+
+  .grid-kpi-exec {
+    grid-template-columns: 1fr;
+  }
+
+  .exec-banner-title {
+    font-size: 24px;
   }
 
   .grid-thirds {

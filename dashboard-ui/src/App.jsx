@@ -13,6 +13,7 @@ const LOAD_ERROR = isStaticData
   : "No se pudo conectar con la API. Ejecutá: python backend_api.py";
 import { US_STATES } from "./usStates.js";
 import { featureLabel } from "./storyContent.js";
+import { buildExecutiveNarrative } from "./executiveBusiness.js";
 import { C, HUE, cat, hsl, quant, shade, tint } from "./theme.js";
 
 const GRID = "hsla(40, 8%, 40%, 0.1)";
@@ -209,10 +210,35 @@ function geomToPaths(geometry) {
   return paths;
 }
 
+const breakevenPlugin = {
+  id: "breakevenLine",
+  afterDatasetsDraw(chart, _args, opts) {
+    const month = opts.breakevenMonth;
+    if (month == null || month < 0) return;
+    const xScale = chart.scales.x;
+    const { top, bottom } = chart.chartArea;
+    const x = xScale.getPixelForValue(month);
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.strokeStyle = C.baseline;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+    ctx.stroke();
+    ctx.fillStyle = C.baseline;
+    ctx.font = "600 13px sans-serif";
+    ctx.fillText("Breakeven", x + 4, top + 14);
+    ctx.restore();
+  },
+};
+
 // ─── Mapa de estaciones ───────────────────────────────────────────────────────
-function StationMap({ stations }) {
+function StationMap({ stations, mode = "technical" }) {
   const [tooltip, setTooltip] = useState(null);
   const containerRef = useRef(null);
+  const executive = mode === "executive";
 
   if (!stations || !stations.length) {
     return <div style={{ color: "var(--txt2)", fontSize: 17, padding: 20 }}>Sin datos de estaciones.</div>;
@@ -222,6 +248,8 @@ function StationMap({ stations }) {
   const minMae = Math.min(...maes);
   const maxMae = Math.max(...maes);
   const range = maxMae - minMae || 1;
+  const benefits = executive ? stations.map((s) => s.benefitK ?? 0) : [];
+  const maxBenefit = executive ? Math.max(...benefits, 1) : 1;
 
   // Pre-calcular paths de estados (una vez)
   const statePaths = [];
@@ -253,8 +281,9 @@ function StationMap({ stations }) {
         {/* Puntos de estaciones */}
         {stations.map((st, i) => {
           const [x, y] = lonlatToXY(st.lon, st.lat);
-          const t = (st.mae_model - minMae) / range;
-          const col = hotColor(t);
+          const col = executive
+            ? quant(HUE.corrected, (st.benefitK ?? 0) / maxBenefit)
+            : hotColor((st.mae_model - minMae) / range);
           // Solo mostrar estaciones dentro del mapa
           if (x < 0 || x > VBW || y < 0 || y > VBH) return null;
           return (
@@ -283,9 +312,21 @@ function StationMap({ stations }) {
           boxShadow: "0 2px 8px rgba(0,0,0,0.18)", zIndex: 20,
         }}>
           <div style={{ fontWeight: 600, marginBottom: 2 }}>{tooltip.st.station_id}</div>
-          <div>|Error| corregido: <strong>{tooltip.st.mae_model.toFixed(2)}%</strong></div>
-          <div>|Error| original:&nbsp;&nbsp;&nbsp; <strong>{tooltip.st.mae_bench.toFixed(2)}%</strong></div>
-          <div style={{ color: "var(--txt2)" }}>Mejora: {tooltip.st.improvement.toFixed(1)}%</div>
+          {executive ? (
+            <>
+              <div>Beneficio est.: <strong>${(tooltip.st.benefitK ?? 0).toFixed(0)}K</strong>/verano</div>
+              <div>Mejora: <strong>{(tooltip.st.improvement ?? 0).toFixed(1)}%</strong></div>
+              <div style={{ color: "var(--txt2)" }}>
+                Error {tooltip.st.mae_bench.toFixed(1)}% → {tooltip.st.mae_model.toFixed(1)}%
+              </div>
+            </>
+          ) : (
+            <>
+              <div>|Error| corregido: <strong>{tooltip.st.mae_model.toFixed(2)}%</strong></div>
+              <div>|Error| original:&nbsp;&nbsp;&nbsp; <strong>{tooltip.st.mae_bench.toFixed(2)}%</strong></div>
+              <div style={{ color: "var(--txt2)" }}>Mejora: {(tooltip.st.improvement ?? 0).toFixed(1)}%</div>
+            </>
+          )}
         </div>
       )}
 
@@ -295,14 +336,18 @@ function StationMap({ stations }) {
         background: "var(--bg1)", border: "0.5px solid var(--brd)",
         borderRadius: 6, padding: "8px 12px", fontSize: 15, color: "var(--txt2)",
       }}>
-        <div style={{ marginBottom: 3, fontWeight: 500 }}>|Error| corregido</div>
+        <div style={{ marginBottom: 3, fontWeight: 500 }}>
+          {executive ? "Beneficio est. / verano" : "|Error| corregido"}
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <span>{minMae.toFixed(1)}%</span>
+          <span>{executive ? "$0" : `${minMae.toFixed(1)}%`}</span>
           <div style={{
             width: 64, height: 8, borderRadius: 4,
-            background: "linear-gradient(to right, #000, #ff0000, #ffff00)",
+            background: executive
+              ? `linear-gradient(to right, ${C.correctedTint}, ${C.corrected})`
+              : "linear-gradient(to right, #000, #ff0000, #ffff00)",
           }} />
-          <span>{maxMae.toFixed(1)}%</span>
+          <span>{executive ? `$${Math.round(maxBenefit)}K` : `${maxMae.toFixed(1)}%`}</span>
         </div>
       </div>
     </div>
@@ -391,43 +436,81 @@ export default function App() {
 
   const modelLabel = models.find((m) => m.id === model)?.label ?? model;
 
-  // ── KPIs ──────────────────────────────────────────────────────────────────
-  const kpis = metrics ? [
-    {
-      lbl: "MAE error humedad",
-      val: `${metrics.mae.toFixed(2)}%`,
-      sub: `benchmark: ${metrics.mae_benchmark.toFixed(1)}%`,
-      col: C.corrected,
-    },
-    {
-      lbl: "% mejora MAE",
-      val: `${metrics.mejora > 0 ? "+" : ""}${metrics.mejora.toFixed(1)}%`,
-      sub: "vs benchmark",
-      col: metrics.mejora >= 40 ? C.corrected : C.warn,
-    },
-    {
-      lbl: "RMSE",
-      val: `${metrics.rmse.toFixed(1)}%`,
-      sub: "raíz error cuad.",
-      col: C.muted,
-    },
-    {
-      lbl: "Error humedad corregido",
-      val: errorMetrics
-        ? `${errorMetrics.error_humedad_comp_mean >= 0 ? "+" : ""}${errorMetrics.error_humedad_comp_mean.toFixed(2)}%`
-        : "—",
-      sub: errorMetrics
-        ? `Error original: ${errorMetrics.error_humedad_mean >= 0 ? "+" : ""}${errorMetrics.error_humedad_mean.toFixed(2)}%`
-        : "prom. est+hora",
-      col: C.neutral,
-    },
-    {
-      lbl: "Folds validados",
-      val: String(metrics.folds?.length ?? 0),
-      sub: "períodos históricos",
-      col: C.accent,
-    },
-  ] : [];
+  // ── Perfil ejecutivo: narrativa de negocio ─────────────────────────────────
+  const exec = metrics
+    ? buildExecutiveNarrative({ metrics, errorMetrics, improvement, stationMae })
+    : null;
+
+  const execKpiColor = {
+    corrected: C.corrected,
+    accent: C.accent,
+    neutral: C.neutral,
+  };
+
+  const purchaseCostChart = exec ? {
+    labels: exec.purchaseCost.labels,
+    datasets: [
+      {
+        label: "Sin corrección",
+        data: exec.purchaseCost.without,
+        borderColor: C.baseline,
+        backgroundColor: C.baselineA(0.12),
+        fill: false,
+        tension: 0.3,
+        pointRadius: 4,
+      },
+      {
+        label: "Con corrección",
+        data: exec.purchaseCost.withCorrection,
+        borderColor: C.corrected,
+        backgroundColor: C.correctedA(0.2),
+        fill: "-1",
+        tension: 0.3,
+        pointRadius: 4,
+      },
+    ],
+  } : null;
+
+  const scenarioChart = exec ? {
+    labels: exec.scenarios.map((s) => s.label),
+    datasets: [
+      {
+        label: "Sin corrección",
+        data: exec.scenarios.map((s) => s.without),
+        backgroundColor: C.baselineA(0.8),
+        borderRadius: 4,
+      },
+      {
+        label: "Con corrección",
+        data: exec.scenarios.map((s) => s.with),
+        backgroundColor: C.correctedA(0.8),
+        borderRadius: 4,
+      },
+    ],
+  } : null;
+
+  const paybackChart = exec ? {
+    labels: exec.payback.months.map((m) => (m === 0 ? "Impl." : `M${m}`)),
+    datasets: [
+      {
+        label: "Sin corrección",
+        data: exec.payback.baseline,
+        borderColor: C.muted,
+        borderDash: [5, 4],
+        pointRadius: 0,
+        tension: 0,
+      },
+      {
+        label: "Con corrección (acum.)",
+        data: exec.payback.corrected,
+        borderColor: C.corrected,
+        backgroundColor: C.correctedA(0.08),
+        fill: true,
+        tension: 0.25,
+        pointRadius: 4,
+      },
+    ],
+  } : null;
 
   // ── Evolución del MAE entre modelos ─────────────────────────────────────────
   const evoChart = {
@@ -975,97 +1058,96 @@ export default function App() {
         </div>
       )}
 
-      {/* ═══ PERFIL EJECUTIVO — 6 gráficos originales ═══════════════════════ */}
-      {profile === "ejecutivo" && (
+      {/* ═══ PERFIL EJECUTIVO — impacto de negocio ═══════════════════════════ */}
+      {profile === "ejecutivo" && exec && (
         <div className={`dashboard-grid${modelLoading ? " is-updating" : ""}`}>
           <div className="grid-thirds">
-            <div className="grid-kpi span-3">
-              {kpis.map((k) => (
-                <div className="card kpi" key={k.lbl}>
-                  <div className="kpi-accent" style={{ background: k.col }} />
+            <div className="exec-banner span-3">
+              <div className="exec-banner-title">{exec.banner.headline}</div>
+              <p className="exec-banner-sub">{exec.banner.sub}</p>
+            </div>
+
+            <div className="grid-kpi-exec span-3">
+              {exec.kpis.map((k) => (
+                <div className="card kpi kpi-exec" key={k.lbl}>
+                  <div className="kpi-accent" style={{ background: execKpiColor[k.col] }} />
                   <div className="kpi-label">{k.lbl}</div>
                   <div className="kpi-value">{k.val}</div>
                   <div className="kpi-sub">{k.sub}</div>
+                  <div className="kpi-badge">{k.badge}</div>
                 </div>
               ))}
             </div>
 
-            {/* Acto 1 — Hitos: cómo llegamos hasta acá */}
-            <div className="card focal story-evolution">
-              <div className="card-title">Evolución del MAE entre modelos — hitos del proyecto</div>
+            <div className="card focal span-3">
+              <div className="card-title">Costo de compra de energía — sin vs con corrección</div>
+              <p className="card-hint">Área entre líneas = ahorro estimado · Escala conservadora para distribuidora mediana del Noreste</p>
               <ChartPanel wide>
-                <Bar key={model} data={evoChart} options={{ ...evoOptions, ...chartFit }} />
-              </ChartPanel>
-              <div className="evo-cards">
-                {evolution.map((e) => (
-                  <div
-                    key={e.model}
-                    className={`evo-card ${e.model === model ? "active" : ""}`}
-                    onClick={() => setModel(e.model)}
-                  >
-                    <div className="evo-label">{e.label}</div>
-                    <div className="evo-value">{e.mae.toFixed(2)}%</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Acto 2 — Impacto: dónde y cuánto */}
-            <div className="impact-row">
-              <div className="card map-story-main">
-                <div className="card-title">|Error| por estación — Este de EE.UU.</div>
-                <div className="map-chart-fill">
-                  <StationMap key={model} stations={stationMae} />
-                </div>
-              </div>
-
-              <div className="card focal-secondary">
-                <div className="card-title">Error residual — {modelLabel}</div>
-                <ChartPanel fill>
-                  <Bar key={model} data={residualChart} options={{ ...residualOptions, ...chartFit }} plugins={[residualZeroLinePlugin]} />
-                </ChartPanel>
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-title">Ciclo diurno del bias — {modelLabel}</div>
-              <ChartPanel>
-                <Line key={model} data={hourlyChart} options={{ ...hourlyOptions, ...chartFit }} />
-              </ChartPanel>
-            </div>
-
-            <div className="card">
-              <div className="card-title">Folds — MAE original vs corregido — {modelLabel}</div>
-              <ChartPanel>
-                <Bar
+                <Line
                   key={model}
-                  data={foldsChart}
-                  options={{ ...chartFit, plugins: { legend: legendBottom }, scales: { ...axis, y: { ...axis.y, title: { ...CHART_TITLE, text: "MAE (%HR)" } } } }}
+                  data={purchaseCostChart}
+                  options={{
+                    ...chartFit,
+                    plugins: { legend: legendBottom },
+                    scales: {
+                      x: { ...axis.x, title: { ...CHART_TITLE, text: "Humedad pronosticada (%HR)" } },
+                      y: { ...axis.y, beginAtZero: false, title: { ...CHART_TITLE, text: "Costo de compra ($/MWh)" }, grid: { color: GRID } },
+                    },
+                  }}
                 />
               </ChartPanel>
             </div>
 
             <div className="card">
-              <div className="card-title">SHAP — importancia — {modelLabel}</div>
-              {topShap.length === 0 ? (
-                <p className="card-empty">Sin datos SHAP para este modelo.</p>
-              ) : (
-                <ChartPanel>
-                  <Bar
-                    key={model}
-                    data={shapChart}
-                    options={{
-                      ...chartOpts,
-                      ...chartFit,
-                      indexAxis: "y",
-                      scales: {
-                        x: { ticks: { font: CHART_FONT, callback: (v) => `${v}%` }, title: { ...CHART_TITLE, text: "Importancia (%)" } },
-                        y: { ticks: { font: CHART_FONT } },
+              <div className="card-title">Escenarios de pico — costo del error</div>
+              <ChartPanel>
+                <Bar
+                  key={model}
+                  data={scenarioChart}
+                  options={{
+                    ...chartFit,
+                    plugins: { legend: legendBottom },
+                    scales: {
+                      x: { ticks: { font: CHART_FONT } },
+                      y: { beginAtZero: true, ticks: { font: CHART_FONT, callback: (v) => `$${v}M` }, title: { ...CHART_TITLE, text: "Costo ($M)" }, grid: { color: GRID } },
+                    },
+                  }}
+                />
+              </ChartPanel>
+            </div>
+
+            <div className="card focal-secondary">
+              <div className="card-title">Payback period — ROI acumulado</div>
+              <ChartPanel>
+                <Line
+                  key={model}
+                  data={paybackChart}
+                  options={{
+                    ...chartFit,
+                    plugins: {
+                      legend: legendBottom,
+                      breakevenLine: { breakevenMonth: exec.payback.breakevenMonth },
+                    },
+                    scales: {
+                      x: { ticks: { font: CHART_FONT, maxRotation: 45 } },
+                      y: {
+                        ticks: { font: CHART_FONT, callback: (v) => `$${v}M` },
+                        title: { ...CHART_TITLE, text: "Beneficio acumulado ($M)" },
+                        grid: { color: GRID },
                       },
-                    }}
-                  />
-                </ChartPanel>
-              )}
+                    },
+                  }}
+                  plugins={[breakevenPlugin]}
+                />
+              </ChartPanel>
+            </div>
+
+            <div className="card span-3">
+              <div className="card-title">Cobertura geográfica — {exec.mapStations.length}+ estaciones mejoradas</div>
+              <p className="card-hint">Verde = mayor beneficio estimado por estación · La mejora no se concentra en una sola región</p>
+              <div className="map-chart-fill map-chart-exec">
+                <StationMap key={model} stations={exec.mapStations} mode="executive" />
+              </div>
             </div>
           </div>
         </div>
