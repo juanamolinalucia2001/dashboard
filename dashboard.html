@@ -95,7 +95,7 @@ select{padding:10px 14px;font-size:17px;border:.5px solid var(--brd);border-radi
   <header class="header">
     <div>
       <h1>Corrección de pronóstico de humedad relativa</h1>
-      <p>CatBoost v5 · Walk-forward · 500+ estaciones · Oct 2024 – Oct 2025</p>
+      <p>CatBoost v5 · Walk-forward · 500+ estaciones · Oct 2025 – May 2026</p>
     </div>
     <div class="header-controls">
       <select id="modelSelect"></select>
@@ -331,7 +331,10 @@ function toXY(lon,lat){
   return[((lon-L0)/(L1-L0))*W,((merc(A1)-merc(lat))/(merc(A1)-merc(A0)))*H];
 }
 function hotCol(t){t=Math.max(0,Math.min(1,t));if(t<1/3)return`rgb(${Math.round(t*3*255)},0,0)`;if(t<2/3)return`rgb(255,${Math.round((t-1/3)*3*255)},0)`;return`rgb(255,255,${Math.round((t-2/3)*3*255)})`}
-function greenCol(t){t=Math.max(0,Math.min(1,t));return`hsl(128,${32+Math.round(t*40)}%,${72-Math.round(t*34)}%)`}
+function greenCol(t){
+  t=Math.pow(Math.max(0,Math.min(1,t)),.72);
+  return`hsl(${92+Math.round(t*38)},${58+Math.round(t*30)}%,${86-Math.round(t*58)}%)`
+}
 function clamp(n,lo,hi){return Math.max(lo,Math.min(hi,n))}
 function round1(n){return Math.round(n*10)/10}
 function ringPath(coords){return coords.map(([lo,la],i)=>{const[x,y]=toXY(lo,la);return`${i?'L':'M'}${x.toFixed(1)},${y.toFixed(1)}`}).join(' ')+' Z'}
@@ -343,13 +346,15 @@ function renderMap(sts,containerId,mode){
   if(!sts?.length){el.innerHTML='<div style="color:var(--txt2);padding:20px">Sin datos.</div>';return}
   const maes=sts.map(s=>s.mae_model),mn=Math.min(...maes),mx=Math.max(...maes),rng=mx-mn||1;
   const benefits=exec?sts.map(s=>s.benefitK||0):[];
+  const minB=exec?Math.min(...benefits):0;
   const maxB=exec?Math.max(...benefits,1):1;
+  const rangeB=Math.max(maxB-minB,1);
   const stateSVG=US_STATES.states.flatMap(s=>geoPaths(s.geometry)).map(d=>`<path d="${d}" fill="var(--map-land)" stroke="var(--map-border)" stroke-width="0.5"/>`).join('');
   const dots=sts.map((s,i)=>{const[x,y]=toXY(s.lon,s.lat);return(x<0||x>W||y<0||y>H)?'':
-    `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${exec?greenCol((s.benefitK||0)/maxB):hotCol((s.mae_model-mn)/rng)}" stroke="rgba(0,0,0,0.4)" stroke-width="0.4" data-i="${i}" style="cursor:pointer"/>`}).join('');
-  const legMin=exec?'$0':`${mn.toFixed(1)}%`;
+    `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${exec?4.6:4}" fill="${exec?greenCol(((s.benefitK||0)-minB)/rangeB):hotCol((s.mae_model-mn)/rng)}" stroke="rgba(0,0,0,0.55)" stroke-width="${exec?0.7:0.4}" data-i="${i}" style="cursor:pointer"/>`}).join('');
+  const legMin=exec?`$${Math.round(minB)}K`:`${mn.toFixed(1)}%`;
   const legMax=exec?`$${Math.round(maxB)}K`:`${mx.toFixed(1)}%`;
-  const legGrad=exec?'linear-gradient(to right,hsl(128,30%,94%),hsl(128,52%,38%))':'linear-gradient(to right,#000,#f00,#ff0)';
+  const legGrad=exec?'linear-gradient(to right,hsl(92,58%,86%),hsl(112,74%,56%),hsl(130,88%,28%))':'linear-gradient(to right,#000,#f00,#ff0)';
   const legTitle=exec?'Beneficio est. / verano':'|Error| corregido';
   el.innerHTML=`<div style="position:relative;width:100%;height:100%">
     <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:100%;display:block" preserveAspectRatio="xMidYMid meet">

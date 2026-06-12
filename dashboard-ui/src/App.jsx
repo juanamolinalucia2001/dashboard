@@ -235,6 +235,11 @@ const breakevenPlugin = {
 };
 
 // ─── Mapa de estaciones ───────────────────────────────────────────────────────
+function executiveGreen(t) {
+  const x = Math.pow(Math.max(0, Math.min(1, t)), 0.72);
+  return `hsl(${92 + Math.round(x * 38)}, ${58 + Math.round(x * 30)}%, ${86 - Math.round(x * 58)}%)`;
+}
+
 function StationMap({ stations, mode = "technical" }) {
   const [tooltip, setTooltip] = useState(null);
   const containerRef = useRef(null);
@@ -249,7 +254,9 @@ function StationMap({ stations, mode = "technical" }) {
   const maxMae = Math.max(...maes);
   const range = maxMae - minMae || 1;
   const benefits = executive ? stations.map((s) => s.benefitK ?? 0) : [];
+  const minBenefit = executive ? Math.min(...benefits) : 0;
   const maxBenefit = executive ? Math.max(...benefits, 1) : 1;
+  const benefitRange = Math.max(maxBenefit - minBenefit, 1);
 
   // Pre-calcular paths de estados (una vez)
   const statePaths = [];
@@ -282,13 +289,13 @@ function StationMap({ stations, mode = "technical" }) {
         {stations.map((st, i) => {
           const [x, y] = lonlatToXY(st.lon, st.lat);
           const col = executive
-            ? quant(HUE.corrected, (st.benefitK ?? 0) / maxBenefit)
+            ? executiveGreen(((st.benefitK ?? 0) - minBenefit) / benefitRange)
             : hotColor((st.mae_model - minMae) / range);
           // Solo mostrar estaciones dentro del mapa
           if (x < 0 || x > VBW || y < 0 || y > VBH) return null;
           return (
-            <circle key={i} cx={x} cy={y} r={4}
-              fill={col} stroke="rgba(0,0,0,0.4)" strokeWidth="0.4"
+            <circle key={i} cx={x} cy={y} r={executive ? 4.6 : 4}
+              fill={col} stroke="rgba(0,0,0,0.55)" strokeWidth={executive ? 0.7 : 0.4}
               style={{ cursor: "pointer" }}
               onMouseMove={(e) => {
                 const rect = containerRef.current?.getBoundingClientRect();
@@ -296,7 +303,7 @@ function StationMap({ stations, mode = "technical" }) {
                 setTooltip({ x: e.clientX - rect.left, y: e.clientY - rect.top, st });
               }}
               onMouseEnter={(e) => e.currentTarget.setAttribute("r", "6")}
-              onMouseLeave={(e) => { e.currentTarget.setAttribute("r", "4"); setTooltip(null); }}
+              onMouseLeave={(e) => { e.currentTarget.setAttribute("r", executive ? "4.6" : "4"); setTooltip(null); }}
             />
           );
         })}
@@ -340,11 +347,11 @@ function StationMap({ stations, mode = "technical" }) {
           {executive ? "Beneficio est. / verano" : "|Error| corregido"}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <span>{executive ? "$0" : `${minMae.toFixed(1)}%`}</span>
+          <span>{executive ? `$${Math.round(minBenefit)}K` : `${minMae.toFixed(1)}%`}</span>
           <div style={{
             width: 64, height: 8, borderRadius: 4,
             background: executive
-              ? `linear-gradient(to right, ${C.correctedTint}, ${C.corrected})`
+              ? "linear-gradient(to right, hsl(92,58%,86%), hsl(112,74%,56%), hsl(130,88%,28%))"
               : "linear-gradient(to right, #000, #ff0000, #ffff00)",
           }} />
           <span>{executive ? `$${Math.round(maxBenefit)}K` : `${maxMae.toFixed(1)}%`}</span>
@@ -1016,7 +1023,7 @@ export default function App() {
       <header className="header">
         <div>
           <h1>Corrección de pronóstico de humedad relativa</h1>
-          <p>CatBoost v5 · Walk-forward (5 folds) · 500+ estaciones · Oct 2024 – Oct 2025</p>
+          <p>CatBoost v5 · Walk-forward (5 folds) · 500+ estaciones · Oct 2025 – May 2026</p>
         </div>
         <div className="header-controls">
           <select value={model} onChange={(e) => setModel(e.target.value)} disabled={loading}>
