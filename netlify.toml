@@ -1,7 +1,7 @@
-# Dashboard estático: datos embebidos en el build (dashboard_data.json)
+# Sitio estático: dashboard.html (datos embebidos, sin API)
 [build]
-  command = "cd dashboard-ui && npm ci && npm run build"
-  publish = "dashboard-ui/dist"
+  command = "mkdir -p netlify-publish && cp dashboard.html netlify-publish/index.html"
+  publish = "netlify-publish"
 
 [[redirects]]
   from = "/*"
