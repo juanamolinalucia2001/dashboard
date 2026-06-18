@@ -75,9 +75,9 @@ select{padding:10px 14px;font-size:17px;border:.5px solid var(--brd);border-radi
 .evo-card.active .evo-value{color:var(--color-corrected)}
 @media(max-width:600px){.evo-cards{grid-template-columns:repeat(3,1fr)}}
 .folds-note{font-size:14px;color:var(--txt2);margin-top:6px;flex-shrink:0}
-.profile-tabs{display:none;gap:8px;background:var(--bg3);padding:4px;border-radius:10px;border:.5px solid var(--brd)}
-.profile-tab{flex:1;padding:10px 14px;border:none;border-radius:8px;background:transparent;color:var(--txt2);font-size:16px;cursor:pointer;text-align:left}
-.profile-tab small{display:block;font-size:13px;margin-top:2px;opacity:.85}
+.profile-tabs{display:flex;gap:3px;background:var(--bg3);padding:3px;border-radius:999px;border:.5px solid var(--brd)}
+.profile-tab{padding:7px 12px;border:none;border-radius:999px;background:transparent;color:var(--txt2);font-size:13px;font-weight:600;cursor:pointer;text-align:center;white-space:nowrap}
+.profile-tab small{display:none}
 .profile-tab.active{background:var(--bg1);color:var(--txt1);font-weight:600;box-shadow:0 1px 4px hsla(40,10%,10%,.08)}
 .grid-kpi-exec{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
 .exec-banner{background:linear-gradient(135deg,hsl(128,42%,32%),hsl(128,48%,26%));color:#fff;border-radius:12px;padding:22px 26px;box-shadow:0 4px 20px hsla(128,40%,20%,.25)}
@@ -99,17 +99,16 @@ select{padding:10px 14px;font-size:17px;border:.5px solid var(--brd);border-radi
     </div>
     <div class="header-controls">
       <select id="modelSelect"></select>
+      <div class="profile-tabs" aria-label="Cambiar perfil">
+        <button type="button" class="profile-tab" id="tabTecnico" onclick="navigateProfile('tecnico')">
+          Técnico
+        </button>
+        <button type="button" class="profile-tab active" id="tabEjecutivo" onclick="navigateProfile('ejecutivo')">
+          Ejecutivo
+        </button>
+      </div>
     </div>
   </header>
-
-  <div class="profile-tabs">
-    <button type="button" class="profile-tab active" id="tabTecnico" onclick="navigateProfile('tecnico')">
-      Perfil técnico <small>DE · DA · MLE · Académico</small>
-    </button>
-    <button type="button" class="profile-tab" id="tabEjecutivo" onclick="navigateProfile('ejecutivo')">
-      Perfil ejecutivo <small>PM · Stakeholder</small>
-    </button>
-  </div>
 
   <div class="dashboard-grid" id="gridTecnico">
     <div class="grid-thirds">
